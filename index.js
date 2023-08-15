@@ -46,12 +46,15 @@
 // time.sleep(5)
 
 const path = require("path");
+const fs = require("fs");
 const { ServiceBuilder } = require("selenium-webdriver/chrome");
 const { Builder, By, until } = require("selenium-webdriver");
 
 const chromeDriver = path.join(__dirname, "chromedriver.exe"); // or wherever you've your geckodriver
 const serviceBuilder = new ServiceBuilder(chromeDriver);
 const excludedValueNames = ["MDRD", "eGFR", "FIB", "SERUM INDEX", "LIPEMIA", "ICTERUS", "HEMOLYSİS"];
+let dateRegex = /^(\d{2}\.\d{2}\.\d{2})/;
+let valueRegex = /^(((-|<|>)?\d+,?\d*)?\s?((NEGATİF\(-\))|(POZİTİF\(\+\)))?)/;
 
 function sleep(ms) {
 	return new Promise((resolve) => {
@@ -66,6 +69,8 @@ async function findAsyncSequential(array, predicate) {
 	}
 	return undefined;
 }
+
+const startTime = new Date();
 
 (async () => {
 	const driver = await new Builder().forBrowser("chrome").setChromeService(serviceBuilder).build();
@@ -113,7 +118,13 @@ async function findAsyncSequential(array, predicate) {
 		let hastaSorgula = await hastaSorgulaShadowRoot.findElement(By.css("button"));
 		await hastaSorgula.click();
 
-		await sleep(2000);
+		await driver.wait(
+			until.elementTextContains(
+				driver.findElement(By.css("body > vaadin-app-layout > vaadin-horizontal-layout > vaadin-horizontal-layout:nth-child(2) > label")),
+				"Hasta Sorgulama"
+			)
+		);
+
 		let hastaListesi = await driver.findElements(
 			By.css("body > vaadin-app-layout > div > div > div > div.view-frame__content > vaadin-grid > vaadin-grid-cell-content")
 		);
@@ -143,31 +154,63 @@ async function findAsyncSequential(array, predicate) {
 		await driver.executeScript("arguments[0].scrollBy(0, -arguments[0].scrollHeight);", table);
 
 		const allData = {};
-		//click patient
-		for (const hastaİsmi of [hastaİsimleri[9]]) {
+		const patientTimes = [];
+		for (const hastaİsmi of hastaİsimleri) {
+			const patientStartTime = new Date();
+			await driver.wait(
+				until.elementTextContains(
+					driver.findElement(By.css("body > vaadin-app-layout > vaadin-horizontal-layout > vaadin-horizontal-layout:nth-child(2) > label")),
+					"Hasta Sorgulama"
+				)
+			);
 			console.log("Searching for: ", hastaİsmi);
+			hastaListesi = await driver.findElements(
+				By.css("body > vaadin-app-layout > div > div > div > div.view-frame__content > vaadin-grid > vaadin-grid-cell-content")
+			);
+			hastaListesi = hastaListesi.slice(3);
 			if (!(hastaİsmi in allData)) allData[hastaİsmi] = {};
 			let hastaSonuçları = allData[hastaİsmi];
 			let hasta = await findAsyncSequential(hastaListesi, async (item) => (await item.getText()).includes(hastaİsmi));
 			if (!hasta) {
+				let hastaTablosu = await driver.findElement(
+					By.css("body > vaadin-app-layout > div > div > div > div.view-frame__content > vaadin-grid")
+				);
+				let hastaTablosuShadowRoot = await hastaTablosu.getShadowRoot();
+				let table = await hastaTablosuShadowRoot.findElement(By.css("table"));
 				await driver.executeScript("arguments[0].scrollBy(0, arguments[0].scrollHeight);", table);
 				hasta = await findAsyncSequential(hastaListesi, async (item) => (await item.getText()).includes(hastaİsmi));
 			}
 			if (!hasta) throw new Error("Hasta bulunamadı: " + hastaİsmi);
 			console.log("Found: ", await hasta.getText());
+			await driver.executeScript("arguments[0].scrollIntoView();", hasta);
+			const titleElement = driver.findElement(
+				By.css("body > vaadin-app-layout > vaadin-horizontal-layout > vaadin-horizontal-layout:nth-child(2) > label")
+			);
+			let titleText = await titleElement.getText();
 			await hasta.click();
-			await driver.wait(
-				until.elementLocated(
+			// Nucleus XCE
+			// Tetkik Sonuç
+			await driver.wait(async () => {
+				return !(await titleElement.getText()).includes(titleText);
+			});
+			titleText = await titleElement.getText();
+			if (titleText.includes("Nucleus XCE")) {
+				let sonuçlarıGösterButton = await driver.findElement(
 					By.css(
 						"body > vaadin-app-layout > div > div > div > div.view-frame__content > div > div > div > div.mobilmenu__group > div > div"
 					)
-				)
-			);
-			let sonuçlarıGösterButton = await driver.findElement(
-				By.css("body > vaadin-app-layout > div > div > div > div.view-frame__content > div > div > div > div.mobilmenu__group > div > div")
-			);
-			await sonuçlarıGösterButton.click();
-			await driver.wait(until.elementLocated(By.css("vaadin-tab")), 5000);
+				);
+				await sonuçlarıGösterButton.click();
+				await driver.wait(
+					until.elementTextContains(
+						driver.findElement(
+							By.css("body > vaadin-app-layout > vaadin-horizontal-layout > vaadin-horizontal-layout:nth-child(2) > label")
+						),
+						"Tetkik Sonuç"
+					)
+				);
+			} else if (titleText.includes("Tetkik Sonuç")) {
+			} else throw new Error("Unknown title: " + titleText);
 
 			let tableParent = await driver.findElement(
 				By.css(
@@ -188,42 +231,67 @@ async function findAsyncSequential(array, predicate) {
 				for (const i in gridCellContents) {
 					let text = await gridCellContents[i].getText();
 					if (excludedValueNames.some((excludedValue) => text.includes(excludedValue))) continue;
-					if (text.split("\n").length === 1) continue;
-					if (text.split("\n")[0].includes("Teknik Onaylı")) {
-						text = text.split("\n").slice(1).join("\n");
+					let rows = text.split("\n");
+					if (rows.length === 1) continue;
+					if (rows[0].includes("Teknik Onaylı")) {
+						rows = rows.slice(1);
 					}
-					if (text.split("\n").length > 64) {
-						// which means hemogram
-						let rows = text.split("\n");
-						let dateRegex = /^(\d{2}\.\d{2}\.\d{2})/;
+					if (
+						rows[0].includes("Hemogram") ||
+						rows[0].includes("Protrombin Zamanı") ||
+						rows[0].includes("Kan gazı") ||
+						rows[0].includes("Tam İdrar")
+					) {
 						let dateResult = dateRegex.exec(rows[1]);
-						if (!rows[0].includes("Hemogram") || !dateResult) continue;
+						if (!dateResult) continue; // if date is not found, continue
 						if (!(dateResult[0] in hastaSonuçları)) hastaSonuçları[dateResult[0]] = {};
 						let dateObj = hastaSonuçları[dateResult[0]];
-						for (let j = 2; j < rows.length; j++) {
-							if ((j - 2) % 4 === 0 && rows[j] && rows[j + 1] && rows[j + 2] && rows[j + 3]) {
-								let valueRegex = /^((-|<|>)?\d+,?\d*)/;
-								let valueResult = valueRegex.exec(rows[j + 1]);
-								if (!valueResult) continue;
-								if (!dateObj[rows[j]]) dateObj[rows[j]] = valueResult[0];
-							}
+						let rowElements = await gridCellContents[i].findElements(By.css("vaadin-vertical-layout > vaadin-vertical-layout > div"));
+						for (const rowIndex in rowElements) {
+							const rowElement = rowElements[rowIndex];
+							const rowElementText = await rowElement.getText();
+							const splitedRowText = rowElementText.split("\n");
+							// console.log(rowIndex + "-" + rowElementText);
+							if (!dateObj[splitedRowText[0]]) dateObj[splitedRowText[0]] = splitedRowText[1];
 						}
+						// console.log(dateObj);
 					} else {
-						// biyokimya veya diğer
+						// Biyokimya veya elisa
+						let dateResult = dateRegex.exec(rows.at(-1));
+						if (!dateResult) continue; // if date is not found, continue
+						if (!(dateResult[0] in hastaSonuçları)) hastaSonuçları[dateResult[0]] = {};
+						let dateObj = hastaSonuçları[dateResult[0]];
+						let valueResult = valueRegex.exec(rows[1]);
+						if (!valueResult) continue;
+						if (!dateObj[rows[0]]) dateObj[rows[0]] = valueResult[0].trim();
 					}
-					console.log(i + "-" + text);
 					// console.log(i + "-" + text.split("\n").at(-1));
 				}
-				console.log(hastaSonuçları);
+				// console.log(hastaSonuçları);
 				scroll += 300;
 				await driver.executeScript("arguments[0].scrollTo(0, arguments[1]);", table, scroll);
 				scrollHeight = await driver.executeScript("return arguments[0].scrollHeight", table);
-				await sleep(1000);
 			}
+			let backButtonParent = await driver.findElement(
+				By.css(
+					"body > vaadin-app-layout > div > div > div > div.view-frame__header > vaadin-vertical-layout > hasta-bilgileri > div.scroll-area > vaadin-horizontal-layout > vaadin-button"
+				)
+			);
+			const patientProcessTime = (new Date() - patientStartTime) / 1000;
+			console.log("Patient processed in " + patientProcessTime + " seconds!");
+			patientTimes.push(patientProcessTime);
+			let backButtonParentShadowRoot = await backButtonParent.getShadowRoot();
+			let backButton = await backButtonParentShadowRoot.findElement(By.css("#button"));
+			await backButton.click();
 		}
-
-		// kan sonucu regexi ^((-|<|>)?\d+,?\d*)
-		// tarih regexi ^(\d{2}\.\d{2}\.\d{2})
+		console.log("Executed in " + (new Date() - startTime) / 1000 + " seconds!");
+		console.log("Mean patient process time: " + patientTimes.reduce((a, b) => a + b, 0) / patientTimes.length + " seconds.");
+		console.log("Max patient process time: " + Math.max(...patientTimes) + " seconds.");
+		console.log("Min patient process time: " + Math.min(...patientTimes) + " seconds.");
+		fs.writeFile("data.json", JSON.stringify(allData), "utf8", function (err) {
+			if (err) throw err;
+			console.log("complete");
+		});
 		await sleep(5000);
 		await driver.quit();
 	} catch (e) {
