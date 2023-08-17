@@ -10,6 +10,7 @@
 	"license": "ISC",
 	"dependencies": {
 		"chromedriver": "^115.0.1",
+		"docx": "^8.2.2",
 		"mocha": "^10.2.0",
 		"selenium-webdriver": "^4.11.1"
 	}
