@@ -23,6 +23,9 @@ const {
 	SectionType,
 } = docx;
 
+//Even though, google docs is probably a better way to create and share docs,
+//it doesn't support rotated text fields in tables, so I had to use docx instead.
+
 // Documents contain sections, you can have multiple sections per document, go here to learn more about sections
 // This simple example will only contain one section
 
@@ -386,6 +389,114 @@ for (const [name, dates] of Object.entries(data)) {
 			}),
 		],
 	});
+
+	const TİTTable = new Table({
+		// TODO
+		float: {
+			horizontalAnchor: TableAnchorType.TEXT,
+			verticalAnchor: TableAnchorType.TEXT,
+			overlap: OverlapType.NEVER,
+			// relativeHorizontalPosition: RelativeHorizontalPosition.LEFT,
+			// relativeVerticalPosition: RelativeVerticalPosition.TOP,
+			leftFromText: 100,
+		},
+		rows: [
+			new MyTableRow({
+				children: [new MyTableCell({ text: "Tarih" }), new MyTableCell({ width: 800 })],
+			}),
+			new MyTableRow({
+				children: [
+					new MyTableCell({ text: "AFP" }),
+					new MyTableCell({
+						width: 800,
+						text: allDateValuesCombined[Object.keys(allDateValuesCombined).find((key) => key.includes("Alfa-feto"))] || "",
+					}),
+				],
+			}),
+			new MyTableRow({
+				children: [
+					new MyTableCell({ text: "CEA" }),
+					new MyTableCell({
+						width: 800,
+						text: allDateValuesCombined[Object.keys(allDateValuesCombined).find((key) => key.includes("CEA"))] || "",
+					}),
+				],
+			}),
+			new MyTableRow({
+				children: [
+					new MyTableCell({ text: "Ca19-9" }),
+					new MyTableCell({
+						width: 800,
+						text: allDateValuesCombined[Object.keys(allDateValuesCombined).find((key) => key.includes("Ca 19-9"))] || "",
+					}),
+				],
+			}),
+			new MyTableRow({
+				children: [
+					new MyTableCell({ text: "Ca15-3" }),
+					new MyTableCell({
+						width: 800,
+						text: allDateValuesCombined[Object.keys(allDateValuesCombined).find((key) => key.includes("Ca 15-3"))] || "",
+					}),
+				],
+			}),
+			new MyTableRow({
+				children: [
+					new MyTableCell({ text: "Ca125" }),
+					new MyTableCell({
+						width: 800,
+						text: allDateValuesCombined[Object.keys(allDateValuesCombined).find((key) => key.includes("Ca125"))] || "",
+					}),
+				],
+			}),
+			new MyTableRow({
+				children: [
+					new MyTableCell({ text: "HDL" }),
+					new MyTableCell({
+						width: 800,
+						text: allDateValuesCombined[Object.keys(allDateValuesCombined).find((key) => key.includes("HDL"))] || "",
+					}),
+				],
+			}),
+			new MyTableRow({
+				children: [
+					new MyTableCell({ text: "VLDL" }),
+					new MyTableCell({
+						width: 800,
+						text: allDateValuesCombined[Object.keys(allDateValuesCombined).find((key) => key.includes("VLDL"))] || "",
+					}),
+				],
+			}),
+			new MyTableRow({
+				children: [
+					new MyTableCell({ text: "LDL" }),
+					new MyTableCell({
+						width: 800,
+						text: allDateValuesCombined[Object.keys(allDateValuesCombined).find((key) => key.includes("(LDL"))] || "",
+					}),
+				],
+			}),
+			new MyTableRow({
+				children: [
+					new MyTableCell({ text: "Tot.Kolest." }),
+					new MyTableCell({
+						width: 800,
+						text: allDateValuesCombined[Object.keys(allDateValuesCombined).find((key) => key.includes("Kolesterol (Total)"))] || "",
+					}),
+				],
+			}),
+			new MyTableRow({
+				children: [
+					new MyTableCell({ text: "Trigliserit" }),
+					new MyTableCell({
+						width: 800,
+						text: allDateValuesCombined[Object.keys(allDateValuesCombined).find((key) => key.includes("Trigliserid"))] || "",
+					}),
+				],
+			}),
+		],
+	});
+
 	sections.push({
 		properties: {
 			page: {
